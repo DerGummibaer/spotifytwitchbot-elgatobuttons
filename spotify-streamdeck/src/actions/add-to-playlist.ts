@@ -30,6 +30,10 @@ export class AddToPlaylistAction extends SingletonAction<Settings> {
       const result = await sendCommand({ action: "add_to_playlist", playlist_id: playlistId });
       if (result.ok) {
         await ev.action.showOk();
+      } else if (result.error === "launching_spotify") {
+        await ev.action.showOk();
+        await ev.action.setTitle("Starting\nSpotify...");
+        setTimeout(() => ev.action.setTitle(""), 4000);
       } else {
         await ev.action.showAlert();
       }

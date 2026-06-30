@@ -51,7 +51,28 @@ class ControlServer:
             writer.close()
             await writer.wait_closed()
 
+    # Actions that actually do something to playback -- these are the ones
+    # worth launching Spotify for if it isn't running. Read-only actions
+    # (now_playing, get_volume, get_queue, get_playlists) deliberately do
+    # NOT trigger a launch, since the tray icon polls now_playing every 10
+    # seconds and we don't want that passive poll popping Spotify open.
+    ACTIONS_NEEDING_DEVICE = {
+        "play_pause", "skip", "previous",
+        "vol_up", "vol_down", "vol_adjust", "vol_set",
+        "queue_add", "add_to_playlist",
+    }
+
     def _dispatch(self, action: str, message: dict) -> dict:
+        if action in self.ACTIONS_NEEDING_DEVICE:
+            if not self.spotify.ensure_spotify_running():
+                # Spotify wasn't running and we just launched it -- there's
+                # nothing to control yet, since a freshly launched Spotify
+                # takes a few seconds to register as an available device.
+                # Tell the caller so a button can show this distinctly
+                # rather than as a generic failure, and the next press
+                # (once Spotify is actually up) will work normally.
+                return {"ok": False, "error": "launching_spotify"}
+
         if action == "vol_up":
             new_vol = self.spotify.adjust_volume(config.VOLUME_STEP)
             return {"ok": new_vol is not None, "volume": new_vol}

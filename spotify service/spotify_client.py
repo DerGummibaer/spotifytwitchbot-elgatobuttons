@@ -4,6 +4,7 @@ to complete the one-time browser login and create the local token cache.
 After that, the bot imports SpotifyController and it refreshes silently.
 """
 import logging
+import os
 
 import spotipy
 from spotipy.oauth2 import SpotifyPKCE
@@ -33,6 +34,31 @@ class SpotifyController:
         if devices.get("devices"):
             return devices["devices"][0]["id"]
         return None
+
+    def ensure_spotify_running(self) -> bool:
+        """
+        Checks whether any Spotify device is available (desktop app, web
+        player, phone, etc). If none is found, launches the local desktop
+        app via its "spotify:" URI -- this is handled by Windows' own
+        protocol-handler resolution, so it works whether Spotify was
+        installed from spotify.com or the Microsoft Store, without needing
+        to guess an exe path that differs between install methods.
+
+        Returns True if a device was already available (the caller's
+        original action can proceed normally), False if Spotify had to be
+        launched (the caller should stop here -- there's nothing to control
+        yet, since a freshly launched Spotify takes a few seconds to
+        register as an available device. The next button press will work
+        once it's up).
+        """
+        if self._active_device_id() is not None:
+            return True
+        log.info("No active Spotify device found, launching Spotify via its URI handler")
+        try:
+            os.startfile("spotify:")
+        except OSError as e:
+            log.warning(f"Failed to launch Spotify: {e}")
+        return False
 
     def get_volume(self) -> int | None:
         playback = self.sp.current_playback()

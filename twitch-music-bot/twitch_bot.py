@@ -106,7 +106,13 @@ class MusicBot(commands.Bot):
             return
 
         if not result.get("ok"):
-            await ctx.send(f"@{ctx.author.name} couldn't find or queue that song. Is Spotify playing?")
+            if result.get("error") == "launching_spotify":
+                await ctx.send(
+                    f"@{ctx.author.name} Spotify wasn't running, so it's starting now -- "
+                    f"try your request again in a few seconds!"
+                )
+            else:
+                await ctx.send(f"@{ctx.author.name} couldn't find or queue that song. Is Spotify playing?")
             return
 
         self.tracker.add(ctx.author.name, result["uri"], result["name"], result["artist"])
@@ -153,6 +159,8 @@ class MusicBot(commands.Bot):
             result = await send_command({"action": "vol_set", "value": value})
             if result.get("ok"):
                 await ctx.send(f"Volume set to {value}%")
+            elif result.get("error") == "launching_spotify":
+                await ctx.send("Spotify wasn't running, so it's starting now -- try again in a few seconds!")
             else:
                 await ctx.send("Couldn't set volume. Is Spotify playing?")
         except ServiceUnavailable:
@@ -169,6 +177,8 @@ class MusicBot(commands.Bot):
             return
         if result.get("ok"):
             await ctx.send(f"@{ctx.author.name} skipped the current song.")
+        elif result.get("error") == "launching_spotify":
+            await ctx.send(f"@{ctx.author.name} Spotify wasn't running, so it's starting now -- try again in a few seconds!")
         else:
             await ctx.send("Couldn't skip. Is Spotify playing?")
 

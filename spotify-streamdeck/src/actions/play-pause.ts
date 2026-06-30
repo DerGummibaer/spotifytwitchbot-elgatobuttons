@@ -38,6 +38,18 @@ export class PlayPauseAction extends SingletonAction {
     try {
       const result = await sendCommand({ action: "play_pause" });
       if (!result.ok) {
+        if (result.error === "launching_spotify") {
+          // Spotify wasn't running -- the service just launched it via its
+          // URI handler. This isn't a failure, just nothing to control yet
+          // (a freshly launched Spotify takes a few seconds to register as
+          // a device), so show success rather than an alert. The title
+          // gives a hint for why nothing happened, since showOk() alone
+          // might otherwise look like the button did nothing.
+          await ev.action.showOk();
+          await ev.action.setTitle("Starting\nSpotify...");
+          setTimeout(() => ev.action.setTitle(""), 4000);
+          return;
+        }
         await ev.action.showAlert();
         return;
       }

@@ -7,6 +7,12 @@ export class PreviousAction extends SingletonAction {
     try {
       const result = await sendCommand({ action: "previous" });
       if (!result.ok) {
+        if (result.error === "launching_spotify") {
+          await ev.action.showOk();
+          await ev.action.setTitle("Starting\nSpotify...");
+          setTimeout(() => ev.action.setTitle(""), 4000);
+          return;
+        }
         await ev.action.showAlert();
       }
     } catch (err) {

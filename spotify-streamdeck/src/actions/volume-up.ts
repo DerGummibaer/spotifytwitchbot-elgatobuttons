@@ -24,6 +24,12 @@ export class VolumeUpAction extends SingletonAction<VolumeStepSettings> {
     try {
       const result = await sendCommand({ action: "vol_adjust", delta: step });
       if (!result.ok) {
+        if (result.error === "launching_spotify") {
+          await ev.action.showOk();
+          await ev.action.setTitle("Starting\nSpotify...");
+          setTimeout(() => ev.action.setTitle(`Vol\n+${step}`), 4000);
+          return;
+        }
         await ev.action.showAlert();
       }
     } catch (err) {

@@ -26,9 +26,21 @@ payload\
 pip install -r requirements.txt
 pyinstaller --name SpotifyService --windowed --onedir main.py
 ```
-Copy the *contents* of the resulting `dist\SpotifyService\` folder into
-`payload\SpotifyService\` here (not the folder itself nested inside
-another folder -- the .exe should be directly inside `payload\SpotifyService\`).
+
+⚠️ IMPORTANT -- after PyInstaller runs, open `dist\SpotifyService\` in File
+Explorer. You should see `SpotifyService.exe` and `_internal\` sitting
+directly inside it. Select BOTH of those items (Ctrl+A), copy them, then
+paste into `payload\SpotifyService\` here.
+
+Do NOT copy the `dist` folder itself, or the `dist\SpotifyService` folder
+itself -- only copy the CONTENTS. The end result must be:
+
+    payload\SpotifyService\SpotifyService.exe       <- directly here
+    payload\SpotifyService\_internal\               <- directly here
+
+NOT:
+
+    payload\SpotifyService\dist\SpotifyService\SpotifyService.exe  <- WRONG
 
 Do NOT copy a `.env` or `.spotify_cache` file into this folder -- the
 installer generates `.env` itself from what the user enters in the
@@ -40,7 +52,12 @@ during their own one-time Spotify login.
 pip install -r requirements.txt
 pyinstaller --name TwitchMusicBot --windowed --onedir main.py
 ```
-Copy the contents of `dist\TwitchMusicBot\` into `payload\TwitchMusicBot\`.
+
+⚠️ Same rule applies: copy only the CONTENTS of `dist\TwitchMusicBot\`
+into `payload\TwitchMusicBot\`. The result must be:
+
+    payload\TwitchMusicBot\TwitchMusicBot.exe       <- directly here
+    payload\TwitchMusicBot\_internal\               <- directly here
 
 **The .streamDeckPlugin file** -- from the `spotify-streamdeck` project:
 ```

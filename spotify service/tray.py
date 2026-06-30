@@ -5,6 +5,8 @@ thread and communicates back here via thread-safe state updates.
 """
 import logging
 import os
+import subprocess
+import tempfile
 import threading
 import urllib.request
 import urllib.error
@@ -128,14 +130,89 @@ def _check_for_updates(icon, item):
         if not latest:
             _notify(icon, "Update check", "Could not determine latest version.")
             return
-        if _version_gt(latest, VERSION):
-            _notify(icon, "Update available", f"v{latest} is available (you have v{VERSION}). Opening releases page...")
-            webbrowser.open(GITHUB_RELEASES_URL)
-        else:
+        if not _version_gt(latest, VERSION):
             _notify(icon, "Up to date", f"You're running the latest version (v{VERSION}).")
+            return
+
+        asset_url = _find_installer_asset_url(data)
+        if asset_url is None:
+            log.warning("No installer asset found in release v%s, falling back to browser", latest)
+            _notify(icon, "Update available", f"v{latest} is available. Opening releases page...")
+            webbrowser.open(GITHUB_RELEASES_URL)
+            return
+
+        _notify(icon, "Downloading update", f"Downloading v{latest}, this will only take a moment...")
+        installer_path = _download_installer(asset_url)
+        if installer_path is None:
+            _notify(icon, "Update failed", "Could not download the update. Opening releases page instead...")
+            webbrowser.open(GITHUB_RELEASES_URL)
+            return
+
+        log.info("Downloaded update to %s, launching silent install", installer_path)
+        _notify(icon, "Installing update", f"Installing v{latest} in the background. The tray icon will restart shortly.")
+        _launch_silent_install(installer_path)
+
+        # Give the installer's [Code] section a moment to start before we
+        # exit -- the installer can't overwrite files this process still
+        # has open, so we close down right after handing off. This must
+        # stop both the tray icon's main-thread loop (icon.stop()) and the
+        # asyncio service loop, the same as the Exit menu item does --
+        # otherwise the process keeps running and holds the exe file open,
+        # which would make the installer's file overwrite fail silently.
+        def _shutdown_for_update():
+            if _tray_icon:
+                _tray_icon.stop()
+            if _on_exit:
+                _on_exit()
+
+        threading.Timer(2.0, _shutdown_for_update).start()
+
     except Exception as e:
         log.warning("Update check failed: %s", e)
         _notify(icon, "Update check failed", "Could not reach GitHub. Check your connection.")
+
+
+def _find_installer_asset_url(release_data: dict) -> str | None:
+    """Looks through a GitHub release's assets for the Setup.exe installer."""
+    for asset in release_data.get("assets", []):
+        name = asset.get("name", "")
+        if name.lower().endswith(".exe") and "setup" in name.lower():
+            return asset.get("browser_download_url")
+    return None
+
+
+def _download_installer(url: str) -> str | None:
+    """Downloads the installer exe to a temp path. Returns the local path,
+    or None on failure."""
+    try:
+        temp_dir = tempfile.gettempdir()
+        local_path = os.path.join(temp_dir, "SpotifyStreamDeckSuiteSetup_update.exe")
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": f"spotifytwitchbot-elgatobuttons/{VERSION}"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = resp.read()
+        with open(local_path, "wb") as f:
+            f.write(data)
+        return local_path
+    except Exception as e:
+        log.warning("Failed to download installer: %s", e)
+        return None
+
+
+def _launch_silent_install(installer_path: str):
+    """
+    Launches the downloaded installer with fully silent flags, as a
+    detached process that survives this one exiting. /VERYSILENT and
+    /SUPPRESSMSGBOXES together mean no UI at all and no message boxes
+    even on error; /NORESTART prevents an unexpected reboot.
+    """
+    subprocess.Popen(
+        [installer_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        close_fds=True,
+    )
 
 
 def _version_gt(a: str, b: str) -> bool:

@@ -18,6 +18,22 @@ echo  Full Rebuild Pipeline
 echo ===============================================
 echo.
 
+set /p NEWVERSION="Enter the version number for this build (e.g. 1.2.0), or press Enter to keep the current version: "
+
+if not "%NEWVERSION%"=="" (
+    echo.
+    echo Updating version.py and version.ini to %NEWVERSION%...
+    python "%~dp0set-version.py" "%NEWVERSION%"
+    if errorlevel 1 (
+        echo.
+        echo FAILED: could not update version files. See above.
+        pause
+        exit /b 1
+    )
+    echo Done.
+)
+echo.
+
 REM ---------------------------------------------------------------
 REM 1. Spotify Service
 REM ---------------------------------------------------------------

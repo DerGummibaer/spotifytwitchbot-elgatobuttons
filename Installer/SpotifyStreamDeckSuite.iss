@@ -28,7 +28,30 @@
 ; changes become frequent; not addressed here.
 
 #define MyAppName "Spotify Stream Deck Suite"
-#define MyAppVersion "1.1.0"
+
+; Read the version number from spotify-service/version.ini at compile
+; time, rather than maintaining a separate hardcoded copy here that could
+; drift out of sync. version.ini is kept in sync with version.py
+; automatically by rebuild-all.bat, which prompts for a version number
+; once and writes it to both files.
+;
+; NOTE: an earlier attempt tried parsing version.py directly line-by-line
+; using FileOpen/FileRead inside a #for loop with a #sub callback. That
+; approach hit repeated, hard-to-diagnose ISPP semantics issues (loop
+; variable declaration order, ambiguous first-iteration timing, unclear
+; reassignment semantics inside #for step expressions) across several
+; real compile attempts and was abandoned in favor of this much simpler
+; ReadIni-based approach, which is a single function call with no loop.
+#define VersionIniPath SourcePath + "..\spotify service\version.ini"
+#if FileExists(VersionIniPath)
+  #define MyAppVersion ReadIni(VersionIniPath, "Version", "Number")
+  #if MyAppVersion == ""
+    #error version.ini was found but its [Version] section has no Number key -- expected something like: [Version]{break}Number=1.1.0
+  #endif
+#else
+  #error Could not find version.ini at the expected path -- check VersionIniPath above matches your folder layout, or run rebuild-all.bat which keeps it in sync with version.py
+#endif
+
 #define MyAppPublisher "Leon"
 #define MyAppURL "https://github.com/"
 #define SpotifyServiceExeName "SpotifyService.exe"
@@ -77,6 +100,13 @@ Name: "custom"; Description: "Custom"; Flags: iscustom
 
 [Icons]
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+; Autostart via the Startup folder rather than Task Scheduler -- on at
+; least some Windows configurations, schtasks.exe denies even per-user
+; /SC ONLOGON task creation without elevation, which conflicts with this
+; installer's no-admin design. A Startup folder shortcut needs no
+; elevation at all and is removed automatically on uninstall, same as
+; any other icon in this section.
+Name: "{userstartup}\Spotify Stream Deck Service"; Filename: "{app}\SpotifyService\{#SpotifyServiceExeName}"; WorkingDir: "{app}\SpotifyService"
 
 [Code]
 var
@@ -250,31 +280,6 @@ begin
   SaveStringToFile(EnvPath, Content, False);
 end;
 
-procedure RegisterSpotifyServiceTask;
-var
-  ResultCode: Integer;
-  ExePath: String;
-  TaskCommand: String;
-begin
-  ExePath := ExpandConstant('{app}\SpotifyService\{#SpotifyServiceExeName}');
-  { /F overwrites a task of the same name if one already exists, so re-running
-    the installer to upgrade doesn't fail on a duplicate. }
-  TaskCommand := '/Create /TN "SpotifyStreamDeckService" /TR "' + ExePath + '" /SC ONLOGON /F';
-  { schtasks.exe run via [Run] entries fails with Access Denied even when
-    the installer itself is elevated -- Exec() here runs it correctly
-    elevated instead. }
-  if not Exec(ExpandConstant('{sys}\schtasks.exe'), TaskCommand, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if not WizardSilent then
-      MsgBox('Could not register the Spotify service to start automatically. You can set this up manually later -- see the README.', mbError, MB_OK);
-  end
-  else if ResultCode <> 0 then
-  begin
-    if not WizardSilent then
-      MsgBox('Task Scheduler reported an error (code ' + IntToStr(ResultCode) + ') while registering the Spotify service to start automatically. You can set this up manually later -- see the README.', mbError, MB_OK);
-  end;
-end;
-
 procedure LaunchSpotifyAuth;
 var
   ResultCode: Integer;
@@ -325,7 +330,6 @@ begin
     WriteSpotifyServiceEnv;
     if IsComponentSelected('twitchbot') then
       WriteTwitchBotEnv;
-    RegisterSpotifyServiceTask;
     LaunchSpotifyAuth;
   end;
 end;
@@ -340,5 +344,6 @@ Filename: "{app}\{#StreamDeckPluginFile}"; Flags: shellexec postinstall skipifsi
 ; or modify OBS's plugin folder for safely. Open its download page instead.
 Filename: "https://obsproject.com/forum/resources/autostarter.2083/"; Flags: shellexec postinstall skipifsilent unchecked; Description: "Open the OBS Autostarter page (only needed if you installed the Twitch bot and want it tied to OBS)"
 
-[UninstallRun]
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""SpotifyStreamDeckService"" /F"; Flags: runhidden; RunOnceId: "RemoveSpotifyServiceTask"
+; No [UninstallRun] section needed -- the Startup folder shortcut in
+; [Icons] above is automatically removed on uninstall, the same as any
+; other icon, with no extra code required.

@@ -87,6 +87,19 @@ Source: "payload\SpotifyService\*"; DestDir: "{app}\SpotifyService"; Flags: igno
 ; -- Twitch bot (optional component, see [Components] below) --
 Source: "payload\TwitchMusicBot\*"; DestDir: "{app}\TwitchMusicBot"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: twitchbot
 
+; -- Command alias config template, staged under a different name so it
+;    never silently overwrites a real command_aliases.txt the user has
+;    already edited. [Code]'s DeployAliasTemplateIfMissing below copies
+;    it to the real filename only the first time, when no real file
+;    exists yet -- giving the convenience of having it show up out of
+;    the box, without ever clobbering live edits on a later update. --
+Source: "..\twitch-music-bot\command_aliases.txt.example"; DestDir: "{app}\TwitchMusicBot"; DestName: "command_aliases.txt.example"; Flags: ignoreversion; Components: twitchbot
+
+; -- Convenience script to restart the bot after editing config (e.g.
+;    command_aliases.txt) -- always safe to overwrite since it's not
+;    user-editable config itself, just a fixed helper script. --
+Source: "..\twitch-music-bot\restart-bot.bat"; DestDir: "{app}\TwitchMusicBot"; Flags: ignoreversion; Components: twitchbot
+
 ; -- Stream Deck plugin file, just staged here; actually installed by
 ;    double-clicking it, which we trigger automatically post-install --
 Source: "payload\{#StreamDeckPluginFile}"; DestDir: "{app}"; Flags: ignoreversion
@@ -280,6 +293,31 @@ begin
   SaveStringToFile(EnvPath, Content, False);
 end;
 
+procedure DeployAliasTemplateIfMissing;
+var
+  RealPath: String;
+  TemplatePath: String;
+begin
+  { Only relevant if the Twitch bot component is actually installed --
+    [Files] above only stages the template when Components: twitchbot is
+    selected, so the template file genuinely won't exist otherwise. }
+  if not IsComponentSelected('twitchbot') then
+    exit;
+
+  RealPath := ExpandConstant('{app}\TwitchMusicBot\command_aliases.txt');
+  TemplatePath := ExpandConstant('{app}\TwitchMusicBot\command_aliases.txt.example');
+
+  { Never overwrite a real file the user may have already edited --
+    this is the entire reason the template is staged under a different
+    name in [Files] rather than written directly as command_aliases.txt:
+    so a silent update can never clobber live alias edits. }
+  if FileExists(RealPath) then
+    exit;
+
+  if FileExists(TemplatePath) then
+    FileCopy(TemplatePath, RealPath, False);
+end;
+
 procedure RelaunchTwitchBotIfWasRunning;
 var
   ResultCode: Integer;
@@ -359,7 +397,10 @@ begin
   begin
     WriteSpotifyServiceEnv;
     if IsComponentSelected('twitchbot') then
+    begin
       WriteTwitchBotEnv;
+      DeployAliasTemplateIfMissing;
+    end;
     LaunchSpotifyAuth;
     RelaunchTwitchBotIfWasRunning;
   end;

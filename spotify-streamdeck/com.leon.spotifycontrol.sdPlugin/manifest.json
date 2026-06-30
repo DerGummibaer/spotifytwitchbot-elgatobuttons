@@ -86,6 +86,22 @@
           "TitleAlignment": "middle"
         }
       ]
+    },
+    {
+      "Name": "Add to playlist",
+      "UUID": "com.leon.spotifycontrol.addtoplaylist",
+      "Icon": "imgs/actions/addtoplaylist/icon",
+      "Tooltip": "Adds the currently playing song to a chosen playlist.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "PropertyInspectorPath": "ui/add-to-playlist.html",
+      "States": [
+        {
+          "Image": "imgs/actions/addtoplaylist/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
     }
   ],
   "SDKVersion": 2,

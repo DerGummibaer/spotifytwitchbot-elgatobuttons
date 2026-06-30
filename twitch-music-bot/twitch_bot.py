@@ -7,6 +7,7 @@ command to the always-on Spotify service over the local socket, exactly
 the way the Stream Deck plugin does. If the service isn't running, chat
 commands fail gracefully with a message rather than crashing the bot.
 """
+import asyncio
 import logging
 
 from twitchio.ext import commands
@@ -18,6 +19,8 @@ from service_client import send_command, ServiceUnavailable
 
 log = logging.getLogger("twitch_bot")
 
+SKIP_POLL_INTERVAL = 5  # seconds between now-playing checks for auto-skip
+
 
 class MusicBot(commands.Bot):
     def __init__(self):
@@ -28,9 +31,36 @@ class MusicBot(commands.Bot):
         )
         self.tracker = RequestTracker()
         self.perms = PermissionManager()
+        self._skip_poll_task = None
 
     async def event_ready(self):
         log.info(f"Logged in as {self.nick}, joined #{config.TWITCH_CHANNEL}")
+        self._skip_poll_task = asyncio.create_task(self._auto_skip_poll())
+
+    async def close(self):
+        if self._skip_poll_task:
+            self._skip_poll_task.cancel()
+        await super().close()
+
+    async def _auto_skip_poll(self):
+        """
+        Polls now-playing every few seconds. If the current track was !removed,
+        sends a skip command automatically. This works around Spotify's API not
+        supporting removal of items from the queue.
+        """
+        while True:
+            await asyncio.sleep(SKIP_POLL_INTERVAL)
+            try:
+                result = await send_command({"action": "now_playing"})
+                uri = result.get("uri")
+                if uri and self.tracker.should_skip(uri):
+                    log.info(f"Auto-skipping removed track: {result.get('track')} ({uri})")
+                    self.tracker.clear_skip(uri)
+                    await send_command({"action": "skip"})
+            except ServiceUnavailable:
+                pass
+            except Exception as e:
+                log.warning(f"Auto-skip poll error: {e}")
 
     def _user_level(self, ctx: commands.Context) -> str:
         badges = ctx.author.badges or {}
@@ -90,14 +120,10 @@ class MusicBot(commands.Bot):
         if last is None:
             await ctx.send(f"@{ctx.author.name} you don't have any pending requests to remove.")
             return
-        # Note: this marks it removed in our tracker. Spotify's API doesn't support
-        # removing an arbitrary item from the queue, so the song may still play --
-        # this stops it from counting against the user's request limit and is
-        # mainly useful for fixing "wrong song" mistakes before they're noticed.
         self.tracker.mark_removed(last)
         await ctx.send(
-            f"@{ctx.author.name} removed {last.track_name} from your requests. "
-            f"Note: if it already reached the front of the queue it may still play."
+            f"@{ctx.author.name} removed {last.track_name} from the queue -- "
+            f"it will be skipped automatically if it comes up."
         )
 
     @commands.command(name="vol")

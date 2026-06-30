@@ -14,10 +14,18 @@ export type NowPlaying = {
   album_art_url?: string | null;
 };
 
+export type Playlist = {
+  id: string;
+  name: string;
+};
+
 export type ControlResponse = {
   ok: boolean;
   volume?: number;
   error?: string;
+  playlists?: Playlist[];
+  name?: string;
+  artist?: string;
 } & NowPlaying;
 
 /**

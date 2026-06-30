@@ -5,6 +5,7 @@ import { PreviousAction } from "./actions/previous";
 import { VolumeUpAction } from "./actions/volume-up";
 import { VolumeDownAction } from "./actions/volume-down";
 import { PlayPauseAction } from "./actions/play-pause";
+import { AddToPlaylistAction } from "./actions/add-to-playlist";
 
 if (!streamDeck || typeof streamDeck.logger?.setLevel !== "function") {
   // If this fires, it means the @elgato/streamdeck import didn't resolve
@@ -25,5 +26,6 @@ streamDeck.actions.registerAction(new PreviousAction());
 streamDeck.actions.registerAction(new VolumeUpAction());
 streamDeck.actions.registerAction(new VolumeDownAction());
 streamDeck.actions.registerAction(new PlayPauseAction());
+streamDeck.actions.registerAction(new AddToPlaylistAction());
 
 streamDeck.connect();

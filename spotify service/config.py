@@ -21,7 +21,10 @@ load_dotenv(os.path.join(base_dir, ".env"))
 # --- Spotify ---
 SPOTIFY_CLIENT_ID = os.environ["SPOTIFY_CLIENT_ID"]
 SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
-SPOTIFY_SCOPES = "user-modify-playback-state user-read-playback-state user-read-currently-playing"
+SPOTIFY_SCOPES = (
+    "user-modify-playback-state user-read-playback-state user-read-currently-playing "
+    "playlist-read-private playlist-modify-public playlist-modify-private"
+)
 SPOTIFY_TOKEN_CACHE = os.path.join(base_dir, ".spotify_cache")
 
 # --- Local control socket ---

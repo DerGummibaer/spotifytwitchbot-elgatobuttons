@@ -93,6 +93,17 @@ class ControlServer:
             limit = int(message.get("limit", 5))
             queue = self.spotify.get_queue(limit=limit)
             return {"ok": True, "queue": queue}
+        if action == "get_playlists":
+            playlists = self.spotify.get_playlists()
+            return {"ok": True, "playlists": playlists}
+        if action == "add_to_playlist":
+            playlist_id = message.get("playlist_id", "")
+            if not playlist_id:
+                return {"ok": False, "error": "no playlist_id provided"}
+            track = self.spotify.add_current_track_to_playlist(playlist_id)
+            if track is None:
+                return {"ok": False, "error": "nothing is playing or the add failed"}
+            return {"ok": True, **track}
         return {"ok": False, "error": f"unknown action: {action}"}
 
     async def start(self):

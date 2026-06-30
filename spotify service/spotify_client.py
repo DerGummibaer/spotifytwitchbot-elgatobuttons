@@ -93,6 +93,7 @@ class SpotifyController:
             "track": item.get("name"),
             "artist": artists[0]["name"] if artists else None,
             "album_art_url": album_art_url,
+            "uri": item.get("uri"),
         }
 
     def play_pause(self) -> bool:
@@ -157,6 +158,31 @@ class SpotifyController:
             {"name": t["name"], "artist": t["artists"][0]["name"] if t["artists"] else "Unknown"}
             for t in items
         ]
+
+    def get_playlists(self, limit: int = 50) -> list[dict]:
+        """Returns the current user's playlists as {id, name}, for populating
+        the Stream Deck property inspector's playlist dropdown."""
+        results = self.sp.current_user_playlists(limit=limit)
+        return [{"id": p["id"], "name": p["name"]} for p in results.get("items", [])]
+
+    def add_current_track_to_playlist(self, playlist_id: str) -> dict | None:
+        """Adds the currently playing track to the given playlist. Returns
+        track info on success (for showing feedback), or None if nothing
+        is currently playing or the add failed."""
+        playback = self.sp.current_playback()
+        if not playback or not playback.get("item"):
+            return None
+        track = playback["item"]
+        try:
+            self.sp.playlist_add_items(playlist_id, [track["uri"]])
+        except Exception as e:
+            log.warning(f"Failed to add track to playlist: {e}")
+            return None
+        artists = track.get("artists", [])
+        return {
+            "name": track.get("name"),
+            "artist": artists[0]["name"] if artists else "Unknown",
+        }
 
 
 if __name__ == "__main__":

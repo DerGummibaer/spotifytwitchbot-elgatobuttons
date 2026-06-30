@@ -1,0 +1,36 @@
+# Python build output
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller
+*.spec.bak
+
+# Environment / secrets
+.env
+.spotify_cache
+
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+spotify-streamdeck/node_modules/
+
+# Stream Deck build output
+spotify-streamdeck/com.leon.spotifycontrol.sdPlugin/bundle.js
+*.streamDeckPlugin
+
+# Installer compiled output
+Installer/output/
+
+# Installer payload (compiled exes -- too large for git, built locally)
+Installer/payload/SpotifyService/
+Installer/payload/TwitchMusicBot/
+
+# Windows
+Thumbs.db
+Desktop.ini

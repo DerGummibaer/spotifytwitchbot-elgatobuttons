@@ -1,0 +1,108 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "com.leon.spotifycontrol",
+  "Name": "Spotify control",
+  "Version": "1.0.0.0",
+  "Author": "Leon",
+  "Description": "Control Spotify playback through the local music bot.",
+  "Icon": "imgs/plugin/marketplace",
+  "CategoryIcon": "imgs/plugin/category-icon",
+  "Category": "Spotify control",
+  "CodePath": "bin/plugin.js",
+  "Actions": [
+    {
+      "Name": "Skip",
+      "UUID": "com.leon.spotifycontrol.skip",
+      "Icon": "imgs/actions/skip/icon",
+      "Tooltip": "Skips to the next song.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/skip/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Previous",
+      "UUID": "com.leon.spotifycontrol.previous",
+      "Icon": "imgs/actions/previous/icon",
+      "Tooltip": "Goes back to the previous song.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/previous/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Volume up",
+      "UUID": "com.leon.spotifycontrol.volup",
+      "Icon": "imgs/actions/volup/icon",
+      "Tooltip": "Raises Spotify volume by a configurable step.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "PropertyInspectorPath": "ui/volume-step.html",
+      "States": [
+        {
+          "Image": "imgs/actions/volup/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Volume down",
+      "UUID": "com.leon.spotifycontrol.voldown",
+      "Icon": "imgs/actions/voldown/icon",
+      "Tooltip": "Lowers Spotify volume by a configurable step.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "PropertyInspectorPath": "ui/volume-step.html",
+      "States": [
+        {
+          "Image": "imgs/actions/voldown/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Play/pause",
+      "UUID": "com.leon.spotifycontrol.playpause",
+      "Icon": "imgs/actions/playpause/icon",
+      "Tooltip": "Toggles playback and shows the current song.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/playpause/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    }
+  ],
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.6"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    },
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.15"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20"
+  }
+}

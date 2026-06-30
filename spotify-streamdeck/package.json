@@ -1,0 +1,21 @@
+{
+  "name": "spotify-streamdeck-control",
+  "version": "1.0.0",
+  "description": "Stream Deck plugin to control Spotify via a local bot socket.",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.leon.spotifycontrol\""
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "^1.0.0",
+    "tslib": "^2.6.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@types/node": "^20.0.0",
+    "rollup": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

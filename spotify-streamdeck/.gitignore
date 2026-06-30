@@ -1,0 +1,5 @@
+node_modules/
+com.leon.spotifycontrol.sdPlugin/bin/*.js
+com.leon.spotifycontrol.sdPlugin/bin/*.js.map
+*.streamDeckPlugin
+.DS_Store

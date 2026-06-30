@@ -216,3 +216,49 @@ class MusicBot(commands.Bot):
             await ctx.send(f"Now playing: {track} - {artist}")
         else:
             await ctx.send(f"Paused: {track} - {artist}")
+
+    @commands.command(name="setperm")
+    async def set_permission(self, ctx: commands.Context, *, args: str = ""):
+        # Hardcoded to moderator, NOT routed through self._guard/the
+        # overridable permission system -- if this were itself
+        # overridable, a streamer could accidentally lock themselves out
+        # of ever changing permissions again with a typo.
+        level = self._user_level(ctx)
+        if config.LEVEL_RANK.index(level) < config.LEVEL_RANK.index("moderator"):
+            await ctx.send(f"@{ctx.author.name} !setperm is mod-only.")
+            return
+
+        parts = args.split()
+        if len(parts) != 2:
+            await ctx.send(
+                f"@{ctx.author.name} usage: !setperm <command> <level> "
+                f"-- e.g. !setperm skip moderator. Levels: {', '.join(config.LEVEL_RANK)}"
+            )
+            return
+
+        command_name, new_level = parts[0].lstrip("!").lower(), parts[1].lower()
+        if command_name not in config.PERMISSIONS:
+            await ctx.send(
+                f"@{ctx.author.name} unknown command '{command_name}'. "
+                f"Known commands: {', '.join(config.PERMISSIONS.keys())}"
+            )
+            return
+
+        try:
+            self.perms.set_permission(command_name, new_level)
+        except ValueError as e:
+            await ctx.send(f"@{ctx.author.name} {e}")
+            return
+
+        await ctx.send(f"!{command_name} now requires {new_level} or higher.")
+
+    @commands.command(name="perms")
+    async def show_permissions(self, ctx: commands.Context):
+        level = self._user_level(ctx)
+        if config.LEVEL_RANK.index(level) < config.LEVEL_RANK.index("moderator"):
+            await ctx.send(f"@{ctx.author.name} !perms is mod-only.")
+            return
+        listing = " | ".join(
+            f"!{cmd}: {self.perms.get_permission(cmd)}" for cmd in config.PERMISSIONS.keys()
+        )
+        await ctx.send(listing)

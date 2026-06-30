@@ -197,3 +197,22 @@ class MusicBot(commands.Bot):
             return
         listing = " | ".join(f"{t['name']} - {t['artist']}" for t in queue)
         await ctx.send(f"Up next: {listing}")
+
+    @commands.command(name="song")
+    async def current_song(self, ctx: commands.Context):
+        if not await self._guard(ctx, "song"):
+            return
+        try:
+            result = await send_command({"action": "now_playing"})
+        except ServiceUnavailable:
+            await ctx.send(f"@{ctx.author.name} the Spotify service isn't running right now.")
+            return
+        if not result.get("ok") or not result.get("track"):
+            await ctx.send("Nothing is playing right now.")
+            return
+        track = result["track"]
+        artist = result.get("artist", "Unknown artist")
+        if result.get("is_playing"):
+            await ctx.send(f"Now playing: {track} - {artist}")
+        else:
+            await ctx.send(f"Paused: {track} - {artist}")

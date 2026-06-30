@@ -46,6 +46,7 @@ PERMISSIONS = {
     "vol": "everyone",       # !vol -- anyone
     "skip": "everyone",      # !skip -- anyone (flagged as open; change to "subscriber" later if needed)
     "sq": "everyone",        # !sq -- anyone
+    "song": "everyone",      # !song -- anyone
 }
 
 # Order matters: index = rank. Higher index = more privilege.
@@ -58,6 +59,7 @@ COOLDOWNS = {
     "vol": 3,
     "skip": 10,
     "sq": 10,
+    "song": 5,
 }
 
 # --- Song request behavior ---

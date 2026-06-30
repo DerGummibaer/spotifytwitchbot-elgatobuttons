@@ -148,24 +148,23 @@ def _check_for_updates(icon, item):
             webbrowser.open(GITHUB_RELEASES_URL)
             return
 
-        log.info("Downloaded update to %s, launching silent install", installer_path)
+        log.info("Downloaded update to %s, scheduling delayed silent install", installer_path)
         _notify(icon, "Installing update", f"Installing v{latest} in the background. The tray icon will restart shortly.")
         _launch_silent_install(installer_path)
 
-        # Give the installer's [Code] section a moment to start before we
-        # exit -- the installer can't overwrite files this process still
-        # has open, so we close down right after handing off. This must
-        # stop both the tray icon's main-thread loop (icon.stop()) and the
-        # asyncio service loop, the same as the Exit menu item does --
-        # otherwise the process keeps running and holds the exe file open,
-        # which would make the installer's file overwrite fail silently.
-        def _shutdown_for_update():
-            if _tray_icon:
-                _tray_icon.stop()
-            if _on_exit:
-                _on_exit()
-
-        threading.Timer(2.0, _shutdown_for_update).start()
+        # Exit immediately and unconditionally -- the delay before the
+        # installer actually runs is now handled entirely inside the
+        # detached wrapper process from _launch_silent_install, not by
+        # timing our own shutdown against it. This must stop both the
+        # tray icon's main-thread loop (icon.stop()) and the asyncio
+        # service loop, the same as the Exit menu item does -- otherwise
+        # the process keeps running and holds the exe file open well
+        # past when the wrapper's timeout elapses, which would have us
+        # right back in the same race we just fixed.
+        if _tray_icon:
+            _tray_icon.stop()
+        if _on_exit:
+            _on_exit()
 
     except Exception as e:
         log.warning("Update check failed: %s", e)
@@ -203,13 +202,33 @@ def _download_installer(url: str) -> str | None:
 
 def _launch_silent_install(installer_path: str):
     """
-    Launches the downloaded installer with fully silent flags, as a
-    detached process that survives this one exiting. /VERYSILENT and
-    /SUPPRESSMSGBOXES together mean no UI at all and no message boxes
-    even on error; /NORESTART prevents an unexpected reboot.
+    Launches the downloaded installer with fully silent flags, delayed by
+    a few seconds via a detached cmd.exe wrapper -- NOT launched directly.
+
+    This matters: the installer needs to overwrite SpotifyService.exe,
+    which is still open and locked by THIS running process at the moment
+    this function is called. Launching the installer directly and then
+    separately scheduling our own shutdown a couple seconds later is a
+    race: there's no guarantee our process (and its file lock) is actually
+    gone by the time the installer reaches its file-copy step, and on a
+    real test this race was lost -- the installer ran, "succeeded", but
+    silently skipped overwriting the locked exe, leaving the old version
+    in place with no error shown anywhere.
+
+    The fix: hand off to a separate `cmd /c timeout ... && start ...`
+    process that does the waiting *outside* of this process entirely. We
+    then exit immediately and unconditionally, with no dependency on
+    timing assumptions about our own shutdown speed. By the time the
+    timeout elapses and cmd actually launches the installer, this process
+    is certain to be gone, regardless of how long our own cleanup took.
     """
+    delay_seconds = 3
+    # /SUPPRESSMSGBOXES + /VERYSILENT: no UI; /NORESTART: no surprise reboot
+    installer_cmd = f'"{installer_path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+    wrapper_cmd = f'cmd /c "timeout /t {delay_seconds} /nobreak >nul & {installer_cmd}"'
     subprocess.Popen(
-        [installer_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+        wrapper_cmd,
+        shell=True,
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         close_fds=True,
     )

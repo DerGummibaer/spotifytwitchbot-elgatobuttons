@@ -1,0 +1,26 @@
+# Lets you rename commands without editing code -- useful once you have
+# enough commands that some names collide with other bots, or just feel
+# too generic (e.g. !skip is an extremely common bot command name).
+#
+# Format, one per line:
+#   original_command=new_name
+#
+# Once an alias is set, the ORIGINAL name stops working entirely. !sr
+# will not do anything once "sr=songreq" is active below -- only
+# !songreq will. This is intentional, so there's never a confusing
+# situation with two different working names for the same thing.
+#
+# Changes here only take effect after restarting the bot -- aliases are
+# read once at startup, not watched live.
+#
+# Copy this file to command_aliases.txt (without .example) and edit it,
+# then restart the bot. Lines starting with # are comments and ignored.
+# Leave a command out entirely to keep its original name.
+#
+# Available commands: sr, remove, vol, skip, sq, song
+# (setperm and perms are intentionally not aliasable -- they're
+# mod/admin tools, not viewer-facing commands)
+
+# sr=songreq
+# skip=voteskip
+# vol=volume

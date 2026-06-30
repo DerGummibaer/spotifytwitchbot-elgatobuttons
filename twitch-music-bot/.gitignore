@@ -6,3 +6,5 @@ logs/*.log
 dist/
 build/
 *.spec
+command_aliases.txt
+permission_overrides.json

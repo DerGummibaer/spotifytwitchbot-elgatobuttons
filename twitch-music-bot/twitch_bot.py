@@ -13,6 +13,7 @@ import logging
 from twitchio.ext import commands
 
 import config
+from command_aliases import CommandAliases
 from permissions import PermissionManager, PermissionDenied, OnCooldown
 from request_tracker import RequestTracker
 from service_client import send_command, ServiceUnavailable
@@ -20,6 +21,29 @@ from service_client import send_command, ServiceUnavailable
 log = logging.getLogger("twitch_bot")
 
 SKIP_POLL_INTERVAL = 5  # seconds between now-playing checks for auto-skip
+
+# Loaded once at import time -- BEFORE the class body below, since
+# @commands.command(name=...) decorator arguments are evaluated when the
+# class is defined, not at runtime per-message. This is also why aliases
+# only take effect after restarting the bot: editing command_aliases.txt
+# while the bot is running doesn't change a decorator that already ran.
+#
+# The actual mechanism: when an alias IS set for a command (e.g.
+# sr=songreq), we register the command under name="songreq" instead of
+# name="sr" -- NOT as name="sr", aliases=["songreq"]. twitchio then never
+# learns "sr" exists as a trigger at all once aliased, which is exactly
+# "the original command should not work if an alias has been set"
+# without needing any runtime detection of which name was typed (which
+# turned out to be unreliable to determine cleanly from inside a command
+# body -- see command_aliases.py for the full reasoning).
+_aliases = CommandAliases(config.base_dir)
+
+
+def _effective_name(original: str) -> str:
+    """Returns the alias for a command if one is set, otherwise the
+    original name unchanged -- use this as the name= for every
+    @commands.command decorator below instead of hardcoding the name."""
+    return _aliases.alias_for(original) or original
 
 
 class MusicBot(commands.Bot):
@@ -71,31 +95,38 @@ class MusicBot(commands.Bot):
 
     async def _guard(self, ctx: commands.Context, command: str) -> bool:
         """Runs permission + cooldown checks. Sends a chat message and returns
-        False if the command should not proceed."""
+        False if the command should not proceed.
+
+        `command` is always the ORIGINAL internal name (e.g. "sr"), used
+        for permission/cooldown lookups regardless of aliasing -- but
+        user-facing messages show the actual current trigger name (which
+        could be an alias like "songreq"), so the error makes sense to
+        whoever's reading it in chat."""
+        display_name = _effective_name(command)
         level = self._user_level(ctx)
         try:
             self.perms.check_permission(command, level)
             self.perms.check_cooldown(command, ctx.author.name)
         except PermissionDenied as e:
-            await ctx.send(f"@{ctx.author.name} sorry, !{command} needs {e.required_level} or higher.")
+            await ctx.send(f"@{ctx.author.name} sorry, !{display_name} needs {e.required_level} or higher.")
             return False
         except OnCooldown as e:
-            await ctx.send(f"@{ctx.author.name} !{command} is on cooldown, try again in {e.seconds_left:.0f}s.")
+            await ctx.send(f"@{ctx.author.name} !{display_name} is on cooldown, try again in {e.seconds_left:.0f}s.")
             return False
         self.perms.record_use(command, ctx.author.name)
         return True
 
-    @commands.command(name="sr")
+    @commands.command(name=_effective_name("sr"))
     async def song_request(self, ctx: commands.Context, *, query: str = ""):
         if not await self._guard(ctx, "sr"):
             return
         if not query.strip():
-            await ctx.send(f"@{ctx.author.name} usage: !sr <song name or Spotify link>")
+            await ctx.send(f"@{ctx.author.name} usage: !{_effective_name('sr')} <song name or Spotify link>")
             return
         if self.tracker.count_pending_for(ctx.author.name) >= config.MAX_QUEUE_PER_USER:
             await ctx.send(
                 f"@{ctx.author.name} you already have {config.MAX_QUEUE_PER_USER} songs queued, "
-                f"use !remove first if you want to swap one."
+                f"use !{_effective_name('remove')} first if you want to swap one."
             )
             return
 
@@ -118,7 +149,7 @@ class MusicBot(commands.Bot):
         self.tracker.add(ctx.author.name, result["uri"], result["name"], result["artist"])
         await ctx.send(f"@{ctx.author.name} added {result['name']} by {result['artist']} to the queue!")
 
-    @commands.command(name="remove")
+    @commands.command(name=_effective_name("remove"))
     async def remove_request(self, ctx: commands.Context):
         if not await self._guard(ctx, "remove"):
             return
@@ -132,7 +163,7 @@ class MusicBot(commands.Bot):
             f"it will be skipped automatically if it comes up."
         )
 
-    @commands.command(name="vol")
+    @commands.command(name=_effective_name("vol"))
     async def volume(self, ctx: commands.Context, *, amount: str = ""):
         if not await self._guard(ctx, "vol"):
             return
@@ -150,7 +181,7 @@ class MusicBot(commands.Bot):
             try:
                 value = int(amount)
             except ValueError:
-                await ctx.send(f"@{ctx.author.name} usage: !vol <0-100>")
+                await ctx.send(f"@{ctx.author.name} usage: !{_effective_name('vol')} <0-100>")
                 return
             if not (0 <= value <= 100):
                 await ctx.send(f"@{ctx.author.name} volume must be between 0 and 100.")
@@ -166,7 +197,7 @@ class MusicBot(commands.Bot):
         except ServiceUnavailable:
             await ctx.send(f"@{ctx.author.name} the Spotify service isn't running right now.")
 
-    @commands.command(name="skip")
+    @commands.command(name=_effective_name("skip"))
     async def skip_song(self, ctx: commands.Context):
         if not await self._guard(ctx, "skip"):
             return
@@ -182,7 +213,7 @@ class MusicBot(commands.Bot):
         else:
             await ctx.send("Couldn't skip. Is Spotify playing?")
 
-    @commands.command(name="sq")
+    @commands.command(name=_effective_name("sq"))
     async def show_queue(self, ctx: commands.Context):
         if not await self._guard(ctx, "sq"):
             return
@@ -198,7 +229,7 @@ class MusicBot(commands.Bot):
         listing = " | ".join(f"{t['name']} - {t['artist']}" for t in queue)
         await ctx.send(f"Up next: {listing}")
 
-    @commands.command(name="song")
+    @commands.command(name=_effective_name("song"))
     async def current_song(self, ctx: commands.Context):
         if not await self._guard(ctx, "song"):
             return

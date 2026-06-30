@@ -203,32 +203,49 @@ def _download_installer(url: str) -> str | None:
 def _launch_silent_install(installer_path: str):
     """
     Launches the downloaded installer with fully silent flags, delayed by
-    a few seconds via a detached cmd.exe wrapper -- NOT launched directly.
+    a few seconds, via a small generated .bat file run as a detached
+    process -- NOT launched directly, and NOT via a hand-built `cmd /c
+    "..."` command-line string.
 
-    This matters: the installer needs to overwrite SpotifyService.exe,
-    which is still open and locked by THIS running process at the moment
-    this function is called. Launching the installer directly and then
-    separately scheduling our own shutdown a couple seconds later is a
-    race: there's no guarantee our process (and its file lock) is actually
-    gone by the time the installer reaches its file-copy step, and on a
-    real test this race was lost -- the installer ran, "succeeded", but
-    silently skipped overwriting the locked exe, leaving the old version
-    in place with no error shown anywhere.
+    This matters for two separate reasons:
 
-    The fix: hand off to a separate `cmd /c timeout ... && start ...`
-    process that does the waiting *outside* of this process entirely. We
-    then exit immediately and unconditionally, with no dependency on
-    timing assumptions about our own shutdown speed. By the time the
-    timeout elapses and cmd actually launches the installer, this process
-    is certain to be gone, regardless of how long our own cleanup took.
+    1. The installer needs to overwrite SpotifyService.exe, which is
+       still open and locked by THIS running process at the moment this
+       function is called. Launching the installer directly and then
+       separately scheduling our own shutdown a couple seconds later is
+       a race -- there's no guarantee our process (and its file lock) is
+       actually gone by the time the installer reaches its file-copy
+       step. On a real test this race was lost: the installer ran,
+       "succeeded", but silently skipped overwriting the locked exe.
+
+    2. The first fix for that used `cmd /c "timeout ... & ""path"" ..."`
+       as a single command-line string passed to Popen with shell=True.
+       That also failed silently on a real test -- cmd.exe has a
+       well-documented quirk where, if a command passed to /c begins
+       with a quote character, it strips only the OUTER matching quote
+       pair and does not re-parse what's left normally. With our
+       embedded quoted installer path sitting inside an outer quoted
+       string, this is exactly the ambiguous nested-quoting situation
+       that trips up cmd.exe's parser, and it can fail with no visible
+       error at all since everything here is detached and silent.
+
+    The fix for both: write a small standalone .bat file to a temp path,
+    where each line is parsed normally by cmd.exe (no nested-quoting
+    ambiguity, since we're not cramming everything into one /c string),
+    and launch THAT file as the detached process instead.
     """
     delay_seconds = 3
-    # /SUPPRESSMSGBOXES + /VERYSILENT: no UI; /NORESTART: no surprise reboot
-    installer_cmd = f'"{installer_path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
-    wrapper_cmd = f'cmd /c "timeout /t {delay_seconds} /nobreak >nul & {installer_cmd}"'
+    bat_path = os.path.join(tempfile.gettempdir(), "spotify_suite_update.bat")
+    bat_contents = (
+        "@echo off\n"
+        f"timeout /t {delay_seconds} /nobreak >nul\n"
+        f'"{installer_path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\n'
+    )
+    with open(bat_path, "w") as f:
+        f.write(bat_contents)
+
     subprocess.Popen(
-        wrapper_cmd,
-        shell=True,
+        [bat_path],
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         close_fds=True,
     )

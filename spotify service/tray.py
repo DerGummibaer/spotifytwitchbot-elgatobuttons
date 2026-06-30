@@ -233,12 +233,41 @@ def _launch_silent_install(installer_path: str):
     where each line is parsed normally by cmd.exe (no nested-quoting
     ambiguity, since we're not cramming everything into one /c string),
     and launch THAT file as the detached process instead.
+
+    3. Even after fix #2, this STILL failed silently on a real test on a
+       different PC -- the .bat file was correctly written to disk, but
+       double-clicking it manually showed a console window flash and
+       close immediately, with no installer ever launching. Root cause:
+       the "timeout" command requires a console input stream to listen
+       for a keypress that could interrupt the wait, and this .bat runs
+       as a fully detached background process with NO console attached
+       at all -- so timeout doesn't wait, it fails INSTANTLY with
+       "ERROR: Input redirection is not supported, exiting the process
+       immediately" and the script moves on right away. This is a
+       well-documented Windows quirk specific to "timeout" in background/
+       non-interactive contexts; "ping -n N 127.0.0.1" is the standard
+       workaround, since ping needs no console input and is present on
+       every Windows install by default.
     """
     delay_seconds = 3
     bat_path = os.path.join(tempfile.gettempdir(), "spotify_suite_update.bat")
     bat_contents = (
         "@echo off\n"
-        f"timeout /t {delay_seconds} /nobreak >nul\n"
+        # NOT "timeout /t N" -- timeout tries to listen for a keypress to
+        # interrupt the wait, which requires a console input stream. This
+        # .bat is launched as a fully detached background process with no
+        # console attached at all, so timeout fails INSTANTLY with
+        # "ERROR: Input redirection is not supported, exiting the process
+        # immediately" rather than actually waiting -- confirmed as the
+        # real cause on a real test, where the .bat visibly flashed and
+        # closed immediately instead of waiting 3 seconds. Pinging the
+        # loopback address is the standard, well-documented workaround:
+        # ping doesn't need console input, and is present on every
+        # Windows install by default. -n {delay_seconds + 1} sends one
+        # extra ping because the first one fires immediately rather than
+        # after a delay, so N+1 pings ~1 second apart give N seconds of
+        # actual waiting.
+        f"ping -n {delay_seconds + 1} 127.0.0.1 >nul\n"
         f'"{installer_path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\n'
     )
     with open(bat_path, "w") as f:

@@ -118,6 +118,67 @@ def _refresh_icon():
     _tray_icon.update_menu()
 
 
+def _kill_twitch_bot_if_running() -> bool:
+    """
+    Stops TwitchMusicBot.exe before a silent update, if it's running.
+    Returns True if a running process was actually found and stopped,
+    False if it wasn't running at all (so the installer knows whether to
+    relaunch it afterward -- only if it was actually running before).
+
+    The Twitch bot is a separate process from this service, often
+    launched independently by OBS Autostarter, and the silent update
+    flow had no awareness of it at all -- only this service's own exe
+    was ever stopped before handing off to the installer. If the bot
+    component is installed and happened to be running (e.g. OBS was
+    open), its exe would still be locked when the installer reached its
+    [Files] copy step for TwitchMusicBot.exe, causing exactly the same
+    silent skip-the-locked-file failure we already fixed for
+    SpotifyService.exe itself, but for the bot instead.
+
+    taskkill /IM /F on a process that isn't running just fails harmlessly
+    (exit code 128, "process not found") -- we don't treat that as an
+    error, since most users either don't have the bot installed at all,
+    or simply aren't running it at update time.
+    """
+    try:
+        result = subprocess.run(
+            ["taskkill", "/IM", "TwitchMusicBot.exe", "/F"],
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            log.info("Stopped TwitchMusicBot.exe before silent update")
+            return True
+        # else: not running, or already stopped -- nothing to log, this
+        # is the common case for most users.
+        return False
+    except Exception as e:
+        log.warning("Could not check/stop TwitchMusicBot.exe: %s", e)
+        return False
+
+
+def _write_bot_was_running_marker():
+    """
+    Writes a small marker file the installer checks for (in its update
+    path) to know whether to relaunch the Twitch bot after a silent
+    update -- only if it was actually running before we stopped it,
+    rather than launching it for everyone who merely has it installed.
+    Lives in the TwitchMusicBot folder itself, alongside .env, so both
+    this service and the separate installer process agree on the path
+    without needing any other communication channel between them.
+    """
+    try:
+        import config
+        marker_path = os.path.normpath(
+            os.path.join(config.base_dir, "..", "TwitchMusicBot", "_was_running_before_update")
+        )
+        with open(marker_path, "w") as f:
+            f.write("")
+        log.info("Wrote bot-was-running marker at %s", marker_path)
+    except Exception as e:
+        log.warning("Could not write bot-was-running marker: %s", e)
+
+
 def _check_for_updates(icon, item):
     try:
         req = urllib.request.Request(
@@ -150,6 +211,19 @@ def _check_for_updates(icon, item):
 
         log.info("Downloaded update to %s, scheduling delayed silent install", installer_path)
         _notify(icon, "Installing update", f"Installing v{latest} in the background. The tray icon will restart shortly.")
+
+        # Stop the Twitch bot first if it's running (e.g. via OBS
+        # Autostarter) -- its exe needs to be unlocked for the
+        # installer's [Files] step too, the same as this service's own
+        # exe. This must happen before _launch_silent_install schedules
+        # the installer, giving it a head start on actually being gone.
+        # If it WAS running, write a marker file the installer (a
+        # separate process with no other way to know this) can check for
+        # to know whether to relaunch the bot afterward.
+        bot_was_running = _kill_twitch_bot_if_running()
+        if bot_was_running:
+            _write_bot_was_running_marker()
+
         _launch_silent_install(installer_path)
 
         # Exit immediately and unconditionally -- the delay before the

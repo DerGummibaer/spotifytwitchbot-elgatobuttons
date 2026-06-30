@@ -280,6 +280,36 @@ begin
   SaveStringToFile(EnvPath, Content, False);
 end;
 
+procedure RelaunchTwitchBotIfWasRunning;
+var
+  ResultCode: Integer;
+  MarkerPath: String;
+  BotExePath: String;
+begin
+  { The tray icon's silent-update flow stops TwitchMusicBot.exe before
+    handing off to this installer, since its exe also needs to be
+    unlocked for the [Files] copy step below (same reason
+    SpotifyService.exe needs to be stopped first -- a locked exe gets
+    silently skipped during file copy, with no error shown anywhere).
+    If the bot WAS running, the tray process -- which has no other way
+    to communicate with this separate installer process -- writes a
+    marker file we check for here, so the bot comes back automatically
+    after a silent update instead of silently staying down until the
+    user notices and manually restarts OBS or the bot itself. }
+  MarkerPath := ExpandConstant('{app}\TwitchMusicBot\_was_running_before_update');
+  if not FileExists(MarkerPath) then
+    exit;
+
+  DeleteFile(MarkerPath);
+
+  if not IsComponentSelected('twitchbot') then
+    exit;
+
+  BotExePath := ExpandConstant('{app}\TwitchMusicBot\{#TwitchBotExeName}');
+  if FileExists(BotExePath) then
+    Exec(BotExePath, '', '', SW_HIDE, ewNoWait, ResultCode);
+end;
+
 procedure LaunchSpotifyAuth;
 var
   ResultCode: Integer;
@@ -331,6 +361,7 @@ begin
     if IsComponentSelected('twitchbot') then
       WriteTwitchBotEnv;
     LaunchSpotifyAuth;
+    RelaunchTwitchBotIfWasRunning;
   end;
 end;
 

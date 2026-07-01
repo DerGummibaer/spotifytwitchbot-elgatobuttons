@@ -25,6 +25,8 @@ load_dotenv(os.path.join(base_dir, ".env"))
 
 # --- Credentials (from .env, never hardcode these) ---
 TWITCH_OAUTH_TOKEN = os.environ["TWITCH_OAUTH_TOKEN"]
+TWITCH_REFRESH_TOKEN = os.environ.get("TWITCH_REFRESH_TOKEN", "")
+TWITCH_CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
 TWITCH_BOT_USERNAME = os.environ["TWITCH_BOT_USERNAME"]
 TWITCH_CHANNEL = os.environ["TWITCH_CHANNEL"].lower()
 TWITCH_BROADCASTER_USERNAME = os.environ["TWITCH_BROADCASTER_USERNAME"].lower()

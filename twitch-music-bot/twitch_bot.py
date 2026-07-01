@@ -17,6 +17,7 @@ from command_aliases import CommandAliases
 from permissions import PermissionManager, PermissionDenied, OnCooldown
 from request_tracker import RequestTracker
 from service_client import send_command, ServiceUnavailable
+from token_refresh import refresh_token
 
 log = logging.getLogger("twitch_bot")
 
@@ -61,6 +62,36 @@ class MusicBot(commands.Bot):
         log.info(f"Logged in as {self.nick}, joined #{config.TWITCH_CHANNEL}")
         self._skip_poll_task = asyncio.create_task(self._auto_skip_poll())
 
+    async def event_token_expired(self):
+        """
+        Called by twitchio when an API call returns 401 (token expired).
+        Returns a new access token to reconnect with, or None to let
+        twitchio try its own token generation. Automatically updates
+        .env with the new tokens so they persist across restarts.
+        """
+        log.warning("Twitch token expired -- attempting automatic refresh...")
+        new_token = refresh_token()
+        if new_token:
+            log.info("Token refresh successful, reconnecting...")
+            return new_token
+        log.error(
+            "Token refresh failed -- bot will disconnect. "
+            "Regenerate tokens at twitchtokengenerator.com and update .env, "
+            "then restart the bot."
+        )
+        return None
+
+    async def event_message(self, message):
+        # Override the default event_message to ensure commands work even
+        # when the bot account and the broadcaster account are the same
+        # Twitch account -- twitchio's default behavior filters out
+        # messages in ways that silently break this common single-account
+        # setup. Passing all messages directly to handle_commands lets
+        # twitchio's command parser decide what to do with them.
+        if message.echo:
+            return
+        await self.handle_commands(message)
+
     async def close(self):
         if self._skip_poll_task:
             self._skip_poll_task.cancel()
@@ -82,9 +113,14 @@ class MusicBot(commands.Bot):
                     self.tracker.clear_skip(uri)
                     await send_command({"action": "skip"})
             except ServiceUnavailable:
-                pass
+                pass  # Spotify service not running, try again next poll
             except Exception as e:
-                log.warning(f"Auto-skip poll error: {e}")
+                # repr() rather than str() ensures the exception TYPE is
+                # always visible even when the exception has no message --
+                # some asyncio/network exceptions raise with an empty str()
+                # which previously logged as "Auto-skip poll error: " with
+                # nothing after the colon, making it impossible to diagnose
+                log.warning(f"Auto-skip poll error: {repr(e)}")
 
     def _user_level(self, ctx: commands.Context) -> str:
         badges = ctx.author.badges or {}

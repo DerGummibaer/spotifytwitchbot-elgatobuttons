@@ -36,6 +36,7 @@ _state_lock = threading.Lock()
 _on_reauth = None
 _on_exit = None
 _tray_icon = None
+_update_in_progress = False  # guard against multiple simultaneous update attempts
 
 
 def register_callbacks(on_reauth, on_exit):
@@ -107,14 +108,15 @@ def _refresh_icon():
     _tray_icon.icon = _make_icon_image(connected)
 
     if connected and track:
-        _tray_icon.title = f"Spotify: {track}"
+        title = f"Spotify: {track}"
     elif connected:
-        _tray_icon.title = "Spotify service: connected"
+        title = "Spotify service: connected"
     elif error:
-        _tray_icon.title = f"Spotify service: {error}"
+        title = f"Spotify service: {error}"
     else:
-        _tray_icon.title = "Spotify service: disconnected"
+        title = "Spotify service: disconnected"
 
+    _tray_icon.title = title[:128]  # pystray on Windows has a 128 char limit
     _tray_icon.update_menu()
 
 
@@ -180,6 +182,10 @@ def _write_bot_was_running_marker():
 
 
 def _check_for_updates(icon, item):
+    global _update_in_progress
+    if _update_in_progress:
+        log.info("Update already in progress, ignoring duplicate check")
+        return
     try:
         req = urllib.request.Request(
             GITHUB_API_URL,
@@ -212,14 +218,8 @@ def _check_for_updates(icon, item):
         log.info("Downloaded update to %s, scheduling delayed silent install", installer_path)
         _notify(icon, "Installing update", f"Installing v{latest} in the background. The tray icon will restart shortly.")
 
-        # Stop the Twitch bot first if it's running (e.g. via OBS
-        # Autostarter) -- its exe needs to be unlocked for the
-        # installer's [Files] step too, the same as this service's own
-        # exe. This must happen before _launch_silent_install schedules
-        # the installer, giving it a head start on actually being gone.
-        # If it WAS running, write a marker file the installer (a
-        # separate process with no other way to know this) can check for
-        # to know whether to relaunch the bot afterward.
+        _update_in_progress = True
+
         bot_was_running = _kill_twitch_bot_if_running()
         if bot_was_running:
             _write_bot_was_running_marker()
@@ -238,7 +238,10 @@ def _check_for_updates(icon, item):
         if _tray_icon:
             _tray_icon.stop()
         if _on_exit:
-            _on_exit()
+            try:
+                _on_exit()
+            except RuntimeError:
+                pass  # event loop already closed, that's fine at shutdown
 
     except Exception as e:
         log.warning("Update check failed: %s", e)
@@ -384,7 +387,10 @@ def _open_log(icon, item):
 def _exit(icon, item):
     icon.stop()
     if _on_exit:
-        _on_exit()
+        try:
+            _on_exit()
+        except RuntimeError:
+            pass  # event loop already closed
 
 
 def _build_menu():

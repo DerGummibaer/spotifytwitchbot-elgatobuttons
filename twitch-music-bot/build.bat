@@ -19,7 +19,7 @@ if errorlevel 1 (
 
 echo.
 echo Building exe with PyInstaller...
-pyinstaller --name TwitchMusicBot --windowed --onedir main.py
+pyinstaller --name TwitchMusicBot --windowed --onedir --hidden-import tkinter main.py
 if errorlevel 1 (
     echo.
     echo FAILED: PyInstaller build failed. See the error above.

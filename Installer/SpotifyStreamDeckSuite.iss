@@ -125,6 +125,7 @@ Name: "{userstartup}\Spotify Stream Deck Service"; Filename: "{app}\SpotifyServi
 var
   SpotifyPage: TInputQueryWizardPage;
   TwitchPage: TInputQueryWizardPage;
+  TwitchUserPage: TInputQueryWizardPage;
   ComponentsAdjustedForUpdate: Boolean;
 
 function SpotifyEnvExists: Boolean;
@@ -164,16 +165,21 @@ begin
   SpotifyPage.Add('Spotify Client ID:', False);
 
   TwitchPage := CreateInputQueryPage(SpotifyPage.ID,
-    'Twitch connection',
+    'Twitch tokens',
     'Connect your Twitch bot account',
-    'Get a token from https://twitchtokengenerator.com (choose "Bot Chat ' +
-    'Token") and paste it below, without the "oauth:" prefix.');
+    'Go to https://twitchtokengenerator.com and choose "Bot Chat Token". ' +
+    'Copy all three values shown after generating.');
   TwitchPage.Add('Twitch OAuth token:', True);
   TwitchPage.Add('Twitch refresh token:', True);
-  TwitchPage.Add('Twitch client ID (from twitchtokengenerator.com):', False);
-  TwitchPage.Add('Twitch bot account username:', False);
-  TwitchPage.Add('Your channel name (lowercase):', False);
-  TwitchPage.Add('Your own Twitch username (broadcaster):', False);
+  TwitchPage.Add('Twitch client ID:', False);
+
+  TwitchUserPage := CreateInputQueryPage(TwitchPage.ID,
+    'Twitch usernames',
+    'Tell the bot who is who',
+    'These are Twitch usernames, all lowercase.');
+  TwitchUserPage.Add('Bot account username:', False);
+  TwitchUserPage.Add('Your channel name:', False);
+  TwitchUserPage.Add('Your own streamer username:', False);
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -211,7 +217,7 @@ begin
     here (even behind an "and") crashed with "attempt to expand the app
     constant before it was initialized" the moment Setup evaluated this
     function for wpSelectDir on the way there. }
-  if (PageID = SpotifyPage.ID) or (PageID = TwitchPage.ID) then
+  if (PageID = SpotifyPage.ID) or (PageID = TwitchPage.ID) or (PageID = TwitchUserPage.ID) then
   begin
     if IsUpdate() then
     begin
@@ -219,7 +225,7 @@ begin
       exit;
     end;
   end;
-  if (PageID = TwitchPage.ID) and (not IsComponentSelected('twitchbot')) then
+  if ((PageID = TwitchPage.ID) or (PageID = TwitchUserPage.ID)) and (not IsComponentSelected('twitchbot')) then
     Result := True;
 end;
 
@@ -232,7 +238,7 @@ begin
     crashed for the same reason. Only check it once CurPageID is
     confirmed to be one of our own pages, which by construction never
     appear before wpSelectDir has already been passed. }
-  if (CurPageID = SpotifyPage.ID) or (CurPageID = TwitchPage.ID) then
+  if (CurPageID = SpotifyPage.ID) or (CurPageID = TwitchPage.ID) or (CurPageID = TwitchUserPage.ID) then
   begin
     if IsUpdate() then
       exit;
@@ -250,10 +256,21 @@ begin
     if IsComponentSelected('twitchbot') then
     begin
       if (Trim(TwitchPage.Values[0]) = '') or (Trim(TwitchPage.Values[1]) = '') or
-         (Trim(TwitchPage.Values[2]) = '') or (Trim(TwitchPage.Values[3]) = '') or
-         (Trim(TwitchPage.Values[4]) = '') or (Trim(TwitchPage.Values[5]) = '') then
+         (Trim(TwitchPage.Values[2]) = '') then
       begin
-        MsgBox('Please fill in all four Twitch fields before continuing.', mbError, MB_OK);
+        MsgBox('Please fill in all three Twitch token fields before continuing.', mbError, MB_OK);
+        Result := False;
+      end;
+    end;
+  end;
+  if CurPageID = TwitchUserPage.ID then
+  begin
+    if IsComponentSelected('twitchbot') then
+    begin
+      if (Trim(TwitchUserPage.Values[0]) = '') or (Trim(TwitchUserPage.Values[1]) = '') or
+         (Trim(TwitchUserPage.Values[2]) = '') then
+      begin
+        MsgBox('Please fill in all three username fields before continuing.', mbError, MB_OK);
         Result := False;
       end;
     end;
@@ -290,12 +307,57 @@ begin
     'TWITCH_OAUTH_TOKEN=' + TwitchPage.Values[0] + #13#10 +
     'TWITCH_REFRESH_TOKEN=' + TwitchPage.Values[1] + #13#10 +
     'TWITCH_CLIENT_ID=' + TwitchPage.Values[2] + #13#10 +
-    'TWITCH_BOT_USERNAME=' + TwitchPage.Values[3] + #13#10 +
-    'TWITCH_CHANNEL=' + Lowercase(TwitchPage.Values[4]) + #13#10 +
-    'TWITCH_BROADCASTER_USERNAME=' + Lowercase(TwitchPage.Values[5]) + #13#10 +
+    'TWITCH_BOT_USERNAME=' + Lowercase(TwitchUserPage.Values[0]) + #13#10 +
+    'TWITCH_CHANNEL=' + Lowercase(TwitchUserPage.Values[1]) + #13#10 +
+    'TWITCH_BROADCASTER_USERNAME=' + Lowercase(TwitchUserPage.Values[2]) + #13#10 +
     'SERVICE_HOST=127.0.0.1' + #13#10 +
     'SERVICE_PORT=9876' + #13#10;
   SaveStringToFile(EnvPath, Content, False);
+end;
+
+procedure MigrateTwitchBotEnvIfNeeded;
+{ On update, the credential pages are skipped entirely (the .env file
+  already exists so WriteTwitchBotEnv exits early). This means new keys
+  added in later versions never get written to existing installs.
+  This procedure checks for missing keys and appends placeholder lines
+  with a comment so the user knows to fill them in. The bot logs a
+  clear warning at startup if these are still empty, pointing here. }
+var
+  EnvPath: String;
+  ExistingContent: String;
+  AppendContent: String;
+  NeedsRefreshToken: Boolean;
+  NeedsClientId: Boolean;
+begin
+  if not IsComponentSelected('twitchbot') then
+    exit;
+
+  EnvPath := ExpandConstant('{app}\TwitchMusicBot\.env');
+  if not FileExists(EnvPath) then
+    exit; { fresh install, WriteTwitchBotEnv handled it }
+
+  if not LoadStringFromFile(EnvPath, ExistingContent) then
+    exit;
+
+  NeedsRefreshToken := Pos('TWITCH_REFRESH_TOKEN=', ExistingContent) = 0;
+  NeedsClientId := Pos('TWITCH_CLIENT_ID=', ExistingContent) = 0;
+
+  if not NeedsRefreshToken and not NeedsClientId then
+    exit; { nothing missing, nothing to do }
+
+  AppendContent := #13#10 +
+    '# Added by installer update -- fill these in for automatic token' + #13#10 +
+    '# renewal (so you never need to manually regenerate tokens again).' + #13#10 +
+    '# Get both values from https://twitchtokengenerator.com' + #13#10 +
+    '# then run restart-bot.bat. The bot logs a warning at startup' + #13#10 +
+    '# until these are filled in.' + #13#10;
+
+  if NeedsRefreshToken then
+    AppendContent := AppendContent + 'TWITCH_REFRESH_TOKEN=' + #13#10;
+  if NeedsClientId then
+    AppendContent := AppendContent + 'TWITCH_CLIENT_ID=' + #13#10;
+
+  SaveStringToFile(EnvPath, AppendContent, True); { True = append }
 end;
 
 procedure DeployAliasTemplateIfMissing;
@@ -405,6 +467,7 @@ begin
     if IsComponentSelected('twitchbot') then
     begin
       WriteTwitchBotEnv;
+      MigrateTwitchBotEnvIfNeeded;
       DeployAliasTemplateIfMissing;
     end;
     LaunchSpotifyAuth;

@@ -13,14 +13,11 @@ import os
 import sys
 
 import config
+from credential_prompt import needs_credentials, prompt_for_credentials
 from twitch_bot import MusicBot
 
 os.makedirs(config.LOG_DIR, exist_ok=True)
 
-# When packaged with PyInstaller's --windowed flag, there is no console
-# and sys.stdout/stderr are None. Logging to a None stream raises
-# AttributeError and crashes the app before it starts, so only attach
-# the console handler when a real stream exists.
 handlers = [logging.FileHandler(os.path.join(config.LOG_DIR, config.LOG_FILE))]
 if sys.stdout is not None:
     handlers.append(logging.StreamHandler())
@@ -40,6 +37,12 @@ async def main():
 
 
 if __name__ == "__main__":
+    # Check for missing credentials before starting the asyncio loop --
+    # tkinter must run synchronously on the main thread, and this is the
+    # last safe point before asyncio.run() takes over.
+    if needs_credentials():
+        prompt_for_credentials()
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

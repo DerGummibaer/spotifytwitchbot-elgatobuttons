@@ -98,7 +98,7 @@ if errorlevel 1 (
     exit /b 1
 )
 echo Building exe...
-pyinstaller --name TwitchMusicBot --windowed --onedir main.py
+pyinstaller --name TwitchMusicBot --windowed --onedir --hidden-import tkinter main.py
 if errorlevel 1 (
     popd
     echo.

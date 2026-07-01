@@ -42,21 +42,20 @@ def _build_spotify() -> SpotifyController:
 
 def _poll_now_playing():
     """
-    Background task that updates the tray icon with the currently playing
-    track every 10 seconds, and marks the tray disconnected on error.
+    Background task that checks Spotify connectivity every 60 seconds
+    and marks the tray icon connected/disconnected accordingly.
+    Track name is intentionally not shown -- it was driving frequent
+    API calls that hit Spotify's rate limits for busy installs.
     """
     async def _run():
         while True:
             try:
-                state = _spotify.get_playback_state()
-                if state.get("track"):
-                    tray.set_connected(f"{state['track']} — {state.get('artist', '')}")
-                else:
-                    tray.set_connected(None)
+                _spotify.get_playback_state()
+                tray.set_connected(None)
             except Exception as e:
                 log.warning("Spotify poll failed: %s", e)
                 tray.set_disconnected(str(e)[:60])
-            await asyncio.sleep(10)
+            await asyncio.sleep(60)
     return _run()
 
 

@@ -324,7 +324,7 @@ procedure MigrateTwitchBotEnvIfNeeded;
   clear warning at startup if these are still empty, pointing here. }
 var
   EnvPath: String;
-  ExistingContent: String;
+  ExistingContent: AnsiString;
   AppendContent: String;
   NeedsRefreshToken: Boolean;
   NeedsClientId: Boolean;
@@ -336,11 +336,14 @@ begin
   if not FileExists(EnvPath) then
     exit; { fresh install, WriteTwitchBotEnv handled it }
 
+  { LoadStringFromFile requires AnsiString not String -- Unicode Inno
+    Setup (version 6+) treats these as different types and a String
+    variable causes a type mismatch at compile time. }
   if not LoadStringFromFile(EnvPath, ExistingContent) then
     exit;
 
-  NeedsRefreshToken := Pos('TWITCH_REFRESH_TOKEN=', ExistingContent) = 0;
-  NeedsClientId := Pos('TWITCH_CLIENT_ID=', ExistingContent) = 0;
+  NeedsRefreshToken := Pos('TWITCH_REFRESH_TOKEN=', String(ExistingContent)) = 0;
+  NeedsClientId := Pos('TWITCH_CLIENT_ID=', String(ExistingContent)) = 0;
 
   if not NeedsRefreshToken and not NeedsClientId then
     exit; { nothing missing, nothing to do }
